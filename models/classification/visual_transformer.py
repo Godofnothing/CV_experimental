@@ -22,6 +22,7 @@ class ViTClassifier(pl.LightningModule):
         n_heads: int,
         n_classes: int,
         dropout: float=0.0,
+        activation: str = 'GELU',
         classification_mode: str = 'token'
     ):
         super().__init__()
@@ -37,6 +38,7 @@ class ViTClassifier(pl.LightningModule):
             n_layers=n_layers,
             n_heads=n_heads,
             dropout=dropout,
+            activation=activation,
             create_cls_token=(classification_mode == 'token')
         )
 

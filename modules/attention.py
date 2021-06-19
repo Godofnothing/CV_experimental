@@ -43,15 +43,18 @@ class VisualTransformer(nn.Module):
     def __init__(
         self, 
         input_size: Union[int, tuple],
-        hidden_dim: int, 
+        embed_dim: int, 
+        feedforward_dim: int,
         patch_size: Union[int, tuple],
         n_layers: int,
         n_heads: int,
         dropout: float = 0.0,
+        activation: str = 'GELU',
         create_cls_token: bool = True
     ):
         super().__init__()
-        self.hidden_dim = hidden_dim
+        self.embed_dim = embed_dim
+        self.feedforward_dim = feedforward_dim
         self.patch_size = patch_size
         self.n_layers = n_layers
         self.n_heads = n_heads
@@ -61,29 +64,30 @@ class VisualTransformer(nn.Module):
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         self.n_patches = input_size[0] * input_size[1] // (patch_size[0] * patch_size[1])
 
-        scale = hidden_dim ** -0.5
+        scale = embed_dim ** -0.5
 
         self.create_patches = nn.Conv2d(
             in_channels=3,
-            out_channels=hidden_dim,
+            out_channels=embed_dim,
             kernel_size=patch_size,
             stride=patch_size, 
             bias=False
         )
 
-        self.ln_pre = nn.LayerNorm(normalized_shape=(hidden_dim, self.n_patches + 1))
-        self.ln_out = nn.LayerNorm(normalized_shape=(hidden_dim, self.n_patches + 1))
+        self.ln_pre = nn.LayerNorm(normalized_shape=(embed_dim, self.n_patches + self.create_cls_token))
+        self.ln_out = nn.LayerNorm(normalized_shape=(embed_dim, self.n_patches + self.create_cls_token))
 
         self.encoder = nn.Sequential(
-            *[ResidualAttentionBlock(hidden_dim, n_heads, dropout=dropout) for _ in range(n_layers)] 
+            *[ResidualAttentionBlock(embed_dim, feedforward_dim, n_heads, dropout=dropout, activation=activation, dropout=dropout) 
+            for _ in range(n_layers)] 
         )
 
         self.positional_embedding = nn.Parameter(
-            scale * torch.randn(hidden_dim, self.n_patches + 1)
+            scale * torch.randn(embed_dim, self.n_patches + self.create_cls_token)
         )
 
         if self.create_cls_token:
-            self.class_embedding = nn.Parameter(scale * torch.randn(hidden_dim))
+            self.class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
 
     def forward(self, x: torch.Tensor):
         # patches (B C n_x n_y)
