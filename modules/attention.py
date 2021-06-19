@@ -78,7 +78,7 @@ class VisualTransformer(nn.Module):
         self.ln_out = nn.LayerNorm(normalized_shape=(embed_dim, self.n_patches + self.create_cls_token))
 
         self.encoder = nn.Sequential(
-            *[ResidualAttentionBlock(embed_dim, feedforward_dim, n_heads, dropout=dropout, activation=activation, dropout=dropout) 
+            *[ResidualAttentionBlock(embed_dim, feedforward_dim, n_heads, activation=activation, dropout=dropout) 
             for _ in range(n_layers)] 
         )
 

@@ -5,62 +5,59 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchmetrics
 
-from typing import Union
+from typing import Union, Type
 
-from modules import VisualTransformer
+from modules import AttentionConvMixer, Conv2d
 
 
-class ViTClassifier(pl.LightningModule):
-    supported_classification_modes = ['token', 'pool']
+class AttentionConvMixerClassifier(pl.LightningModule):
 
     def __init__(
         self, 
         input_size: Union[int, tuple],
-        embed_dim: int, 
+        in_channels: int,
+        out_channels: int,
         feedforward_dim: int,
         patch_size: Union[int, tuple],
-        n_layers: int,
+        n_attention_layers: int,
         n_heads: int,
         n_classes: int,
+        kernel_size: int,
         dropout: float=0.0,
-        activation: str = 'GELU',
-        classification_mode: str = 'token'
+        activation_conv: str = 'relu',
+        activation_attn: str = 'GELU',
+        conv_type: Type = Conv2d
     ):
         super().__init__()
         self.n_classes = n_classes
-        self.classification_mode = classification_mode
 
-        assert classification_mode in self.supported_classification_modes
-
-        self.backbone = VisualTransformer(
+        self.backbone = AttentionConvMixer(
+            n_attention_layers=n_attention_layers,
+            in_channels=in_channels,
+            out_channels=out_channels,
             input_size=input_size,
-            embed_dim=embed_dim,
+            kernel_size=kernel_size,
             feedforward_dim=feedforward_dim,
             patch_size=patch_size,
-            n_layers=n_layers,
             n_heads=n_heads,
             dropout=dropout,
-            activation=activation,
-            create_cls_token=(classification_mode == 'token')
+            activation_conv=activation_conv,
+            activation_attn=activation_attn,
+            dropout=dropout,
+            conv_type=conv_type
         )
 
-        if classification_mode:
-            self.pool = nn.Sequential(
-                nn.AdaptiveAvgPool1d(output_size=1),
-                nn.Flatten()
-            )
+        self.pool = nn.Sequential(
+            nn.AdaptiveAvgPool2d(output_size=1),
+            nn.Flatten()
+        )
 
-        self.classifier = nn.Linear(embed_dim, n_classes)
+        self.classifier = nn.Linear(out_channels, n_classes)
 
     def forward(self, images : torch.Tensor):
         embeddings = self.backbone(images)
-
-        if self.classification_mode == 'pool':
-            embeddings = self.pool(embeddings)
-        else:
-            # get the CLS token
-            embeddings = embeddings[..., 0]
-
+        embeddings = self.pool(embeddings)
+        
         logits = self.classifier(embeddings)
         return logits
 
