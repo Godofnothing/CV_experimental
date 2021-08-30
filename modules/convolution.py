@@ -4,6 +4,10 @@ import torch.nn.functional as F
 
 from typing import Union, Type
 
+from torch.nn.modules import batchnorm
+
+from utils.padding import get_padding
+
 
 class Conv2d(nn.Module):
 
@@ -12,7 +16,8 @@ class Conv2d(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: Union[int, tuple],
-        padding: Union[int, tuple] = 0,
+        stride: Union[int, tuple] = 1,
+        padding: Union[int, tuple, str] = 0,
         dilation: Union[int, tuple] = 1,
         groups: int = 1,
         bias: bool = True,
@@ -22,9 +27,12 @@ class Conv2d(nn.Module):
     ):
         super().__init__()
 
+        if isinstance(padding, str):
+            padding = get_padding(padding)
+
         self.conv = nn.Conv2d(
             in_channels, out_channels, kernel_size,
-            padding, dilation, groups, bias, padding_mode
+            stride, padding, dilation, groups, bias, padding_mode
         )
 
         self.activation = getattr(F, activation) if activation else nn.Identity()
@@ -50,6 +58,9 @@ class SeparableConv2d(nn.Module):
         padding_mode = 'zeros'
     ):
         super().__init__()
+
+        if isinstance(padding, str):
+            padding = get_padding(padding)
 
         self.conv_depthwise = nn.Conv2d(
             in_channels=in_channels, 
@@ -94,6 +105,9 @@ class Bottleneck2d(nn.Module):
         padding_mode = 'zeros'
     ):
         super().__init__()
+
+        if isinstance(padding, str):
+            padding = get_padding(padding)
 
         self.conv_depthwise = nn.Conv2d(
             in_channels=in_channels, 
@@ -140,6 +154,8 @@ class ConvResidualBlock(nn.Module):
         activation: str = None,
         dilation: list = None,
         pool_factor: int = 1,
+        pool_type: str = 'max',
+        batchnorm: bool = True,
         conv_type: Type = Conv2d
     ):
         super().__init__()   
@@ -149,15 +165,18 @@ class ConvResidualBlock(nn.Module):
                 in_channels=in_channels if i == 0 else out_channels,
                 out_channels=out_channels,
                 kernel_size=kernel_size,
-                padding=kernel_size//2,
+                padding='same',
                 dilation=dilation,
                 activation=activation,
-                batchnorm=True
+                batchnorm=batchnorm
             )
             for i in range(num_convs)
         ])
 
-        self.pool = nn.AvgPool2d(pool_factor) if pool_factor > 1 else nn.Identity()
+        if pool_factor > 1:
+            self.pool = nn.AvgPool2d(pool_factor) if pool_type == 'max' else nn.MaxPool2d()
+        else:
+            self.pool = nn.Identity()
 
         self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1) if in_channels != out_channels else nn.Identity()
 
@@ -185,7 +204,7 @@ class BottleneckResidualBlock(nn.Module):
                 out_channels=out_channels,
                 kernel_size=kernel_size,
                 shrinkage_factor=shrinkage_factor,
-                padding=kernel_size//2,
+                padding='same',
                 dilation=dilation,
                 activation=activation,
                 batchnorm=True

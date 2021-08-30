@@ -5,58 +5,31 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchmetrics
 
-from typing import Union, Type
+from modules import ResNet
 
-from modules import AttentionConvMixer, Conv2d
-
-
-class AttentionConvMixerClassifier(pl.LightningModule):
+class ResNetClassifier(pl.LightningModule):
 
     def __init__(
         self, 
-        input_size: Union[int, tuple],
-        in_channels: int,
-        out_channels: int,
-        feedforward_dim: int,
-        patch_size: Union[int, tuple],
-        n_attention_layers: int,
-        n_heads: int,
+        config : dict,
         n_classes: int,
-        kernel_size: int,
-        dropout: float=0.0,
-        activation_conv: str = 'relu',
-        activation_attn: str = 'GELU',
-        conv_type: Type = Conv2d
     ):
         super().__init__()
         self.n_classes = n_classes
 
-        self.backbone = AttentionConvMixer(
-            n_attention_layers=n_attention_layers,
-            in_channels=in_channels,
-            out_channels=out_channels,
-            input_size=input_size,
-            kernel_size=kernel_size,
-            feedforward_dim=feedforward_dim,
-            patch_size=patch_size,
-            n_heads=n_heads,
-            activation_conv=activation_conv,
-            activation_attn=activation_attn,
-            dropout=dropout,
-            conv_type=conv_type
-        )
+        self.backbone = ResNet(config=config)
+        output_channels = self.backbone.get_output_channels()
 
         self.pool = nn.Sequential(
             nn.AdaptiveAvgPool2d(output_size=1),
             nn.Flatten()
         )
 
-        self.classifier = nn.Linear(out_channels, n_classes)
+        self.classifier = nn.Linear(output_channels, n_classes)
 
     def forward(self, images : torch.Tensor):
         embeddings = self.backbone(images)
         embeddings = self.pool(embeddings)
-        
         logits = self.classifier(embeddings)
         return logits
 

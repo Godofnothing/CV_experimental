@@ -23,7 +23,7 @@ class ResidualAttentionBlock(nn.Module):
 
         self.mlp = nn.Sequential(OrderedDict([
             ("fc_in", nn.Linear(embed_dim, feedforward_dim)),
-            ("activation", getattr(nn, activation)),
+            ("activation", getattr(nn, activation)()),
             ("fc_out", nn.Linear(feedforward_dim, embed_dim))
         ]))
 

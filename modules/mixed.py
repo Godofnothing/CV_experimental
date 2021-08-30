@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 from torch.nn.modules import batchnorm
 
-from typing import Union, Type
+from typing import Union, Type, Tuple
 
 from .attention import ResidualAttentionBlock
 from .convolution import Conv2d, ConvResidualBlock
 
-from ..utils.patches import images_to_patches, patches_to_images
-from ..utils.padding import get_padding
+from utils.patches import images_to_patches, patches_to_images
+from utils.padding import get_padding
 
 class AttentionConvMixer(nn.Module):
 
@@ -19,9 +19,9 @@ class AttentionConvMixer(nn.Module):
         out_channels: int,
         feedforward_dim: int,
         n_heads: int,
-        input_size:  Union[int, tuple[int]],
-        kernel_size: Union[int, tuple[int]],
-        patch_size: Union[int, tuple[int]],
+        input_size:  Union[int, Tuple[int]],
+        kernel_size: Union[int, Tuple[int]],
+        patch_size: Union[int, Tuple[int]],
         activation_attn: str = 'GELU',
         activation_conv: str = 'relu',
         dropout: float = 0.0,
@@ -45,7 +45,7 @@ class AttentionConvMixer(nn.Module):
                 activation=activation_conv,
                 batchnorm=True,
                 padding=get_padding(kernel_size, mode='same')
-            ) for _ in n_attention_layers
+            ) for _ in range(n_attention_layers)
         ])
 
         self.attn_blocks = nn.ModuleList([
@@ -55,7 +55,7 @@ class AttentionConvMixer(nn.Module):
                 n_heads=n_heads,
                 activation=activation_attn,
                 dropout=dropout
-            ) for _ in n_attention_layers
+            ) for _ in range(n_attention_layers)
         ])
 
         self.final_conv = conv_type(
@@ -68,7 +68,7 @@ class AttentionConvMixer(nn.Module):
         )
 
         self.positional_embedding = nn.Parameter(
-            scale * torch.randn(embed_dim, self.n_patches)
+            scale * torch.randn(self.n_patches, embed_dim)
         )
 
     def forward(self, x: torch.Tensor):
@@ -80,10 +80,15 @@ class AttentionConvMixer(nn.Module):
 
         for idx, (conv_, attn_) in enumerate(zip(self.convs, self.attn_blocks)):
             x = conv_(x)
-            x = images_to_patches(x, self.patch_size)
+            # images to patches and then permute (B C L)->(L B C)
+            # print(x.shape)
+            x = images_to_patches(x, self.patch_size).permute(2, 0, 1)
             if idx == 0:
-                x += self.positional_embedding
+                x += self.positional_embedding.unsqueeze(1)
+            # print(x.shape)
             x = attn_(x)
-            x = patches_to_images(x, (h_, w_), self.patch_size)
+            # print(x.shape)
+            # permute (L B C)->(B C L) and then patches to images
+            x = patches_to_images(x.permute(1, 2, 0), (h_, w_), self.patch_size)
 
         return self.final_conv(x)
